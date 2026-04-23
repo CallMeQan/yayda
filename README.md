@@ -1,7 +1,16 @@
-# Tauri + React + Typescript
+# yayda (Yet Another Youtube Downloader application)
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+## Getting Start
 
-## Recommended IDE Setup
+Download at [release tab](https://github.com/CallMeQan/yayda/releases/latest/)
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+or you can build it yourself
+
+## Development
+
+1. `git clone https://github.com/CallMeQan/yayda`
+2. `cd yayda`
+3. `pnpm install`
+4. `pnpm tauri dev`
+
+To build project, run `pnpm tauri build --no-bundle`, this will took a while, the build version is in `.\src-tauri\target\release\yayda-tauri.exe`. Default to Windows only, edit build config at [tauri.conf.json](./src-tauri/tauri.conf.json)
