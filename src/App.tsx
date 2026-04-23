@@ -2,6 +2,23 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { info, error, warn } from "@tauri-apps/plugin-log";
+import { Loader2, Download, Settings, RefreshCw, AlertCircle, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+
+// shadcn/ui components
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+
 import "./App.css";
 
 type DownloadOptions = {
@@ -131,27 +148,25 @@ function App() {
         setFetchingInfo(true);
         setProgressMsg("Extracting format data...");
         setToast(null);
-    
+
         try {
-            const jsonStr = await invoke<string>("fetch_formats", { 
-                url, 
-                customYtdlp: customYtdlp.trim() || null 
+            const jsonStr = await invoke<string>("fetch_formats", {
+                url,
+                customYtdlp: customYtdlp.trim() || null
             });
-            
+
             info(`Format metadata found for URL: ${url}`);
             const data = JSON.parse(jsonStr);
-            
+
             const videoRes = data.video_resolutions.map(String);
-            // Round bitrates to integers for cleaner UI display (e.g., 129.5 -> 130)
             const audioBr = data.audio_bitrates.map((b: number) => String(Math.round(b)));
-            
+
             setAvailableResolutions(videoRes);
             setAvailableAudioBitrates(audioBr);
-            
-            // Automatically select the highest available qualities
+
             if (videoRes.length > 0) setVideoQuality(videoRes[0]);
             if (audioBr.length > 0) setAudioQuality(audioBr[0]);
-            
+
             setToast({ msg: "Format parameters synchronized.", type: "success" });
         } catch (e: any) {
             error(`Failed to extract format metadata: ${e}`);
@@ -164,206 +179,287 @@ function App() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-                <h1 className="font-display text-4xl font-bold mb-4 tracking-tighter">YAYDA.</h1>
-                {initError ? (
-                    <div className="border border-error bg-surface p-4 text-error">
-                        <p className="font-display">Initialization Failed</p>
-                        <p className="text-sm font-mono mt-2">{initError}</p>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center">
-                        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                        <p className="mt-4 font-mono text-sm tracking-widest text-primary">WAKING UP / FETCHING TOOLS...</p>
-                    </div>
-                )}
+            <div className="dark min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 selection:bg-primary/30">
+                <div className="flex flex-col items-center space-y-4">
+                    <h1 className="text-3xl font-extrabold tracking-tight">YAYDA.</h1>
+                    {initError ? (
+                        <Alert variant="destructive" className="max-w-sm bg-destructive/10 py-2">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle className="text-sm">Initialization Failed</AlertTitle>
+                            <AlertDescription className="font-mono text-[10px] mt-1">{initError}</AlertDescription>
+                        </Alert>
+                    ) : (
+                        <div className="flex flex-col items-center space-y-3">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                            <p className="text-xs font-medium text-muted-foreground tracking-widest uppercase">Fetching Tools...</p>
+                        </div>
+                    )}
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-4 font-sans">
-            <div className="max-w-2xl mx-auto mt-10 border border-gray-800 bg-surface p-6 shadow-2xl relative">
-                <h1 className="font-display text-5xl font-bold mb-8 tracking-tighter">YAYDA.</h1>
+        <div className="dark min-h-screen bg-background text-foreground p-4 font-sans antialiased selection:bg-primary/30 flex items-center justify-center relative overflow-hidden">
+            {/* Subtle background glow effect */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-primary/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-                {toast && (
-                    <div className={`p-4 mb-6 border font-mono text-sm ${toast.type === "error" ? "border-error text-error bg-opacity-10 bg-error" : "border-primary text-primary"}`}>
-                        {toast.msg}
-                        <button className="float-right underline hover:text-white" onClick={() => setToast(null)}>dismiss</button>
-                    </div>
-                )}
+            <Card className="w-full max-w-xl border-border/30 shadow-2xl bg-background/70 backdrop-blur-xl rounded-xl relative z-10">
+                <CardHeader className="pb-3 pt-5 px-5">
+                    <CardTitle className="text-2xl font-extrabold tracking-tight">yayda</CardTitle>
+                    <CardDescription className="text-xs">yet another yt download application</CardDescription>
+                </CardHeader>
 
-                <div className="flex flex-col gap-6">
+                <CardContent className="space-y-4 px-5">
+                    {/* Toast Notification */}
+                    {toast && (
+                        <Alert variant={toast.type === "error" ? "destructive" : "default"} className={`rounded-lg py-2 px-3 ${toast.type === "success" ? "border-green-500/30 bg-green-500/10 text-green-500" : ""}`}>
+                            {toast.type === "error" ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                            <div className="flex justify-between items-center w-full">
+                                <AlertTitle className="mb-0 text-xs font-medium">{toast.msg}</AlertTitle>
+                                <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 hover:bg-transparent" onClick={() => setToast(null)}>Dismiss</Button>
+                            </div>
+                        </Alert>
+                    )}
+
+                    {/* URL Input & Fetch */}
                     <div className="flex gap-2">
-                        <input
+                        <Input
                             type="url"
-                            className="w-full bg-black border border-gray-600 p-4 font-mono focus:border-white focus:outline-none transition-colors"
-                            placeholder="ENTER VIDEO URL"
+                            className="h-9 text-sm rounded-lg bg-muted/40 border-border/40 focus-visible:ring-1 focus-visible:ring-primary/50"
+                            placeholder="Enter Media URL..."
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
                             disabled={downloading || fetchingInfo}
                         />
-                        <button 
+                        <Button
                             onClick={handleFetchInfo}
                             disabled={!url || downloading || fetchingInfo}
-                            className="bg-white text-black px-6 font-display font-bold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                            variant="secondary"
+                            className="h-9 px-4 rounded-lg font-medium text-xs"
                         >
-                            {fetchingInfo ? "..." : "FETCH"}
-                        </button>
+                            {fetchingInfo ? <Loader2 className="h-4 w-4 animate-spin" /> : <><RefreshCw className="mr-2 h-3 w-3" /> Fetch</>}
+                        </Button>
                     </div>
 
-                    <div className="flex justify-between items-center text-sm font-mono tracking-widest text-gray-500">
-                        <button
+                    {/* Power Mode Toggle */}
+                    <div className="flex justify-between items-center">
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setPowerMode(!powerMode)}
-                            className="hover:text-primary transition-colors flex items-center gap-2"
                             disabled={downloading}
+                            className="h-7 px-2 text-muted-foreground hover:text-foreground text-[10px] uppercase tracking-wider font-semibold rounded-md"
                         >
-                            POWER MODE {powerMode ? "[-]" : "[+]"}
-                        </button>
+                            <Settings className="mr-1.5 h-3 w-3" />
+                            Power Mode {powerMode ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />}
+                        </Button>
                     </div>
 
+                    {/* Power Mode Settings */}
                     {powerMode && (
-                        <div className="border border-gray-800 p-4 flex flex-col gap-4 bg-black/40 text-sm">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="font-mono text-xs text-gray-500">MEDIA TYPE</label>
-                                    <select value={mediaType} onChange={e => setMediaType(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 focus:border-white outline-none">
-                                        <option value="video_audio">Video + Audio</option>
-                                        <option value="video_only">Video Only</option>
-                                        <option value="audio_only">Audio Only</option>
-                                    </select>
+                        <div className="space-y-4 bg-muted/20 p-4 rounded-lg border border-border/30 animate-in slide-in-from-top-1 fade-in duration-150">
+                            
+                            {/* General Settings */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Media Type</Label>
+                                    <Select value={mediaType} onValueChange={setMediaType}>
+                                        <SelectTrigger className="h-8 text-xs rounded-md bg-background/40">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-lg text-xs">
+                                            <SelectItem value="video_audio">Video + Audio</SelectItem>
+                                            <SelectItem value="video_only">Video Only</SelectItem>
+                                            <SelectItem value="audio_only">Audio Only</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                                <div className="flex flex-col gap-2">
-                                    <label className="font-mono text-xs text-gray-500">PLAYLIST</label>
-                                    <label className="flex items-center gap-2 font-mono mt-2 cursor-pointer select-none text-gray-300">
-                                        <input type="checkbox" checked={playlist} onChange={e => setPlaylist(e.target.checked)} className="w-4 h-4 accent-primary bg-black border-gray-600" />
-                                        ALLOW PLAYLIST
-                                    </label>
+                                <div className="flex items-center justify-between rounded-md border border-border/30 bg-background/40 px-3 py-1.5">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-xs font-medium">Allow Playlist</Label>
+                                    </div>
+                                    <Switch checked={playlist} onCheckedChange={setPlaylist} className="scale-75 origin-right" />
                                 </div>
                             </div>
 
+                            {/* Video Settings */}
                             {mediaType !== "audio_only" && (
-                                <div className="grid grid-cols-2 gap-4 border-t border-gray-800 pt-4">
-                                    <div className="flex flex-col gap-2">
-                                        <label className="font-mono text-xs text-gray-500">VIDEO FORMAT</label>
-                                        <select value={videoFormat} onChange={e => setVideoFormat(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
-                                            <option value="best">Best Available</option>
-                                            <option value="mp4">MP4</option>
-                                            <option value="mkv">MKV</option>
-                                            <option value="webm">WebM</option>
-                                        </select>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/30">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Video Format</Label>
+                                        <Select value={videoFormat} onValueChange={setVideoFormat}>
+                                            <SelectTrigger className="h-8 text-xs rounded-md bg-background/40">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-lg text-xs">
+                                                <SelectItem value="best">Best Available</SelectItem>
+                                                <SelectItem value="mp4">MP4</SelectItem>
+                                                <SelectItem value="mkv">MKV</SelectItem>
+                                                <SelectItem value="webm">WebM</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
-                                    <div className="flex flex-col gap-2">
-                                        <label className="font-mono text-xs text-gray-500">VIDEO QUALITY</label>
-                                        <select value={videoQuality} onChange={e => setVideoQuality(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
-                                            <option value="best">Best Available</option>
-                                            {availableResolutions.length > 0 ? (
-                                                availableResolutions.map(res => (
-                                                    <option key={res} value={res}>{res}p</option>
-                                                ))
-                                            ) : (
-                                                <>
-                                                    <option value="2160">4K (2160p)</option>
-                                                    <option value="1440">1440p</option>
-                                                    <option value="1080">1080p</option>
-                                                    <option value="720">720p</option>
-                                                    <option value="480">480p</option>
-                                                    <option value="360">360p</option>
-                                                    <option value="240">240p</option>
-                                                    <option value="144">144p</option>
-                                                </>
-                                            )}
-                                        </select>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Video Quality</Label>
+                                        <Select value={videoQuality} onValueChange={setVideoQuality}>
+                                            <SelectTrigger className="h-8 text-xs rounded-md bg-background/40">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-lg text-xs max-h-48">
+                                                <SelectItem value="best">Best Available</SelectItem>
+                                                {availableResolutions.length > 0 ? (
+                                                    availableResolutions.map(res => (
+                                                        <SelectItem key={res} value={res}>{res}p</SelectItem>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <SelectItem value="2160">4K (2160p)</SelectItem>
+                                                        <SelectItem value="1440">1440p</SelectItem>
+                                                        <SelectItem value="1080">1080p</SelectItem>
+                                                        <SelectItem value="720">720p</SelectItem>
+                                                        <SelectItem value="480">480p</SelectItem>
+                                                        <SelectItem value="360">360p</SelectItem>
+                                                    </>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
                             )}
 
+                            {/* Audio Settings */}
                             {mediaType !== "video_only" && (
-                                <div className="grid grid-cols-2 gap-4 border-t border-gray-800 pt-4">
-                                    <div className="flex flex-col gap-2">
-                                        <label className="font-mono text-xs text-gray-500">AUDIO FORMAT</label>
-                                        <select value={audioFormat} onChange={e => setAudioFormat(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
-                                            <option value="best">Best Available</option>
-                                            <option value="mp3">MP3</option>
-                                            <option value="m4a">M4A</option>
-                                            <option value="wav">WAV</option>
-                                        </select>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/30">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Audio Format</Label>
+                                        <Select value={audioFormat} onValueChange={setAudioFormat}>
+                                            <SelectTrigger className="h-8 text-xs rounded-md bg-background/40">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-lg text-xs">
+                                                <SelectItem value="best">Best Available</SelectItem>
+                                                <SelectItem value="mp3">MP3</SelectItem>
+                                                <SelectItem value="m4a">M4A</SelectItem>
+                                                <SelectItem value="wav">WAV</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
-                                    <div className="flex flex-col gap-2">
-                                        <label className="font-mono text-xs text-gray-500">AUDIO QUALITY</label>
-                                        <select value={audioQuality} onChange={e => setAudioQuality(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
-                                            <option value="best">Best Available</option>
-                                            {availableAudioBitrates.length > 0 ? (
-                                                availableAudioBitrates.map(bitrate => (
-                                                    <option key={bitrate} value={bitrate}>{bitrate} kbps</option>
-                                                ))
-                                            ) : (
-                                                <>
-                                                    <option value="320">320 kbps</option>
-                                                    <option value="256">256 kbps</option>
-                                                    <option value="192">192 kbps</option>
-                                                    <option value="128">128 kbps</option>
-                                                    <option value="64">64 kbps</option>
-                                                </>
-                                            )}
-                                        </select>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Audio Quality</Label>
+                                        <Select value={audioQuality} onValueChange={setAudioQuality}>
+                                            <SelectTrigger className="h-8 text-xs rounded-md bg-background/40">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-lg text-xs max-h-48">
+                                                <SelectItem value="best">Best Available</SelectItem>
+                                                {availableAudioBitrates.length > 0 ? (
+                                                    availableAudioBitrates.map(bitrate => (
+                                                        <SelectItem key={bitrate} value={bitrate}>{bitrate} kbps</SelectItem>
+                                                    ))
+                                                ) : (
+                                                    <>
+                                                        <SelectItem value="320">320 kbps</SelectItem>
+                                                        <SelectItem value="256">256 kbps</SelectItem>
+                                                        <SelectItem value="192">192 kbps</SelectItem>
+                                                        <SelectItem value="128">128 kbps</SelectItem>
+                                                        <SelectItem value="64">64 kbps</SelectItem>
+                                                    </>
+                                                )}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-4 border-t border-gray-800 pt-4">
-                                <div className="flex flex-col gap-2">
-                                    <label className="font-mono text-xs text-gray-500">SUBTITLES</label>
-                                    <label className="flex items-center gap-2 font-mono mt-2 cursor-pointer select-none text-gray-300">
-                                        <input type="checkbox" checked={downloadSubtitles} onChange={e => setDownloadSubtitles(e.target.checked)} className="w-4 h-4 accent-primary bg-black border-gray-600" />
-                                        DOWNLOAD SUBS
-                                    </label>
+                            {/* Subtitles & Paths */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-border/30">
+                                <div className="flex items-center justify-between rounded-md border border-border/30 bg-background/40 px-3 py-1.5">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-xs font-medium">Download Subtitles</Label>
+                                    </div>
+                                    <Switch checked={downloadSubtitles} onCheckedChange={setDownloadSubtitles} className="scale-75 origin-right" />
                                 </div>
                                 {downloadSubtitles && (
-                                    <div className="flex flex-col gap-2">
-                                        <label className="font-mono text-xs text-gray-500">SUBTITLE LANG. (DEFAULT: EN)</label>
-                                        <input type="text" value={subtitleLang} onChange={e => setSubtitleLang(e.target.value)} placeholder="en, es, all" className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none" />
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Subtitle Lang</Label>
+                                        <Input 
+                                            value={subtitleLang} 
+                                            onChange={e => setSubtitleLang(e.target.value)} 
+                                            placeholder="en, es, all" 
+                                            className="h-8 text-xs rounded-md bg-background/40" 
+                                        />
                                     </div>
                                 )}
                             </div>
 
-                            <div className="flex flex-col gap-3 border-t border-gray-800 pt-4 mt-2">
-                                <div className="flex flex-col gap-1">
-                                    <span className="font-mono text-xs text-gray-500">SAVE DIRECTORY (BLANK FOR PROJECT FOLDER)</span>
-                                    <input type="text" value={saveToPath} onChange={e => setSaveToPath(e.target.value)} placeholder="Wait for user input e.g. C:\Videos" className="bg-black border border-gray-800 p-2 font-mono text-xs text-gray-300 w-full focus:border-gray-500 outline-none" />
+                            <div className="space-y-3 pt-3 border-t border-border/30">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Save Directory</Label>
+                                    <Input 
+                                        value={saveToPath} 
+                                        onChange={e => setSaveToPath(e.target.value)} 
+                                        placeholder="Blank for project folder" 
+                                        className="h-8 rounded-md bg-background/40 font-mono text-[10px]" 
+                                    />
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <span className="font-mono text-xs text-gray-500">FILENAME TEMPLATE (BLANK FOR YT-DLP DEFAULT)</span>
-                                    <input type="text" value={filenameTemplate} onChange={e => setFilenameTemplate(e.target.value)} placeholder="%(title)s.%(ext)s" className="bg-black border border-gray-800 p-2 font-mono text-xs text-gray-300 w-full focus:border-gray-500 outline-none" />
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Filename Template</Label>
+                                    <Input 
+                                        value={filenameTemplate} 
+                                        onChange={e => setFilenameTemplate(e.target.value)} 
+                                        placeholder="%(title)s.%(ext)s" 
+                                        className="h-8 rounded-md bg-background/40 font-mono text-[10px]" 
+                                    />
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <span className="font-mono text-xs text-gray-500">CUSTOM BINARIES (YT-DLP & FFMPEG)</span>
-                                    <div className="flex gap-2">
-                                        <input type="text" value={customYtdlp} onChange={e => setCustomYtdlp(e.target.value)} placeholder="yt-dlp absolute path" className="bg-black border border-gray-800 p-2 font-mono text-xs text-gray-300 w-full focus:border-gray-500 outline-none" />
-                                        <input type="text" value={customFfmpeg} onChange={e => setCustomFfmpeg(e.target.value)} placeholder="ffmpeg absolute path" className="bg-black border border-gray-800 p-2 font-mono text-xs text-gray-300 w-full focus:border-gray-500 outline-none" />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">yt-dlp Path</Label>
+                                        <Input 
+                                            value={customYtdlp} 
+                                            onChange={e => setCustomYtdlp(e.target.value)} 
+                                            placeholder="Absolute path" 
+                                            className="h-8 rounded-md bg-background/40 font-mono text-[10px]" 
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">ffmpeg Path</Label>
+                                        <Input 
+                                            value={customFfmpeg} 
+                                            onChange={e => setCustomFfmpeg(e.target.value)} 
+                                            placeholder="Absolute path" 
+                                            className="h-8 rounded-md bg-background/40 font-mono text-[10px]" 
+                                        />
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
+                </CardContent>
 
-                    <button
-                        className="w-full text-black bg-white font-display font-bold tracking-widest p-4 hover:bg-primary-container hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed text-lg mt-2 uppercase"
+                <CardFooter className="flex flex-col items-stretch space-y-3 pb-5 px-5 pt-2">
+                    <Button
+                        size="default"
+                        className="w-full h-10 text-sm font-bold rounded-lg tracking-wide transition-all shadow-md hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]"
                         disabled={!url || downloading}
                         onClick={handleDownload}
                     >
-                        {downloading ? "DOWNLOADING..." : "DOWNLOAD"}
-                    </button>
+                        {downloading ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Downloading...</>
+                        ) : (
+                            <><Download className="mr-2 h-4 w-4" /> Download</>
+                        )}
+                    </Button>
 
                     {downloading && progressMsg && (
-                        <div className="border border-primary/30 p-3 mt-4 overflow-hidden bg-black/50">
-                            <p className="font-mono text-xs text-primary truncate" title={progressMsg}>
+                        <div className="rounded-md bg-muted/30 p-2 border border-border/40 animate-in fade-in slide-in-from-bottom-1">
+                            <p className="font-mono text-[10px] text-muted-foreground truncate" title={progressMsg}>
                                 {progressMsg}
                             </p>
                         </div>
                     )}
-                </div>
-            </div>
+                </CardFooter>
+            </Card>
         </div>
     );
 }
