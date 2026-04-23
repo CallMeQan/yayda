@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+
+
+@layer base {
+    body {
+        @apply bg-black text-white font-sans m-0;
+    }
+
+    /* Reset all rounded corners to 0px */
+    * {
+        border-radius: 0px !important;
+    }
+}
