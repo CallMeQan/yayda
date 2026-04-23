@@ -1,5 +1,9 @@
 # yayda (Yet Another Youtube Downloader application)
 
+A very minimal, cross-platform youtube downloader application.
+
+> This is Tauri (Rust) version rewrite of old [Wails' version](https://github.com/CallMeQan/yayda-wails)
+ 
 ## Getting Start
 
 Download at [release tab](https://github.com/CallMeQan/yayda/releases/latest/)
