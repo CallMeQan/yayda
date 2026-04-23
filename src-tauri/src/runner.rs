@@ -1,5 +1,6 @@
+use log::{info, warn};
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_shell::{ShellExt, process::CommandEvent};
+use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 #[derive(serde::Deserialize)]
 pub struct DownloadOptions {
@@ -9,10 +10,10 @@ pub struct DownloadOptions {
     pub custom_ffmpeg: Option<String>,
     pub save_to_path: Option<String>,
     pub filename_template: Option<String>,
-    pub media_type: String, // "video_audio", "video_only", "audio_only"
-    pub video_format: String, // "best", "mp4", "mkv", "webm"
+    pub media_type: String,    // "video_audio", "video_only", "audio_only"
+    pub video_format: String,  // "best", "mp4", "mkv", "webm"
     pub video_quality: String, // "best", "2160", "1080", "720", "480"
-    pub audio_format: String, // "best", "mp3", "m4a", "wav"
+    pub audio_format: String,  // "best", "mp3", "m4a", "wav"
     pub audio_quality: String, // "best", "320", "192", "128"
     pub download_subtitles: bool,
     pub subtitle_lang: Option<String>,
@@ -20,15 +21,23 @@ pub struct DownloadOptions {
 
 #[tauri::command]
 pub async fn download_video(app: AppHandle, options: DownloadOptions) -> Result<String, String> {
+    info!("Initiating download sequence for URL: {}", options.url);
     let current_exe = std::env::current_exe().unwrap();
     let bin_dir = current_exe.parent().unwrap().join("bin");
-    
-    let ytdlp_bin = options.custom_ytdlp.filter(|s| !s.is_empty()).unwrap_or_else(|| bin_dir.join("yt-dlp.exe").to_string_lossy().to_string());
-    let ffmpeg_bin = options.custom_ffmpeg.filter(|s| !s.is_empty()).unwrap_or_else(|| bin_dir.join("ffmpeg.exe").to_string_lossy().to_string());
+
+    let ytdlp_bin = options
+        .custom_ytdlp
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| bin_dir.join("yt-dlp.exe").to_string_lossy().to_string());
+    let ffmpeg_bin = options
+        .custom_ffmpeg
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| bin_dir.join("ffmpeg.exe").to_string_lossy().to_string());
 
     let mut args = vec![
         options.url.clone(),
-        "--ffmpeg-location".to_string(), ffmpeg_bin,
+        "--ffmpeg-location".to_string(),
+        ffmpeg_bin,
     ];
 
     if options.media_type == "audio_only" {
@@ -77,26 +86,131 @@ pub async fn download_video(app: AppHandle, options: DownloadOptions) -> Result<
         }
     }
 
-    let out_dir = options.save_to_path.filter(|s| !s.is_empty())
+    let out_dir = options
+        .save_to_path
+        .filter(|s| !s.is_empty())
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| current_exe.parent().unwrap().join("downloads"));
 
     if !out_dir.exists() {
         let _ = std::fs::create_dir_all(&out_dir);
     }
-    
-    let template = options.filename_template.filter(|s| !s.is_empty()).unwrap_or_else(|| "%(title)s.%(ext)s".to_string());
+
+    let template = options
+        .filename_template
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "%(title)s.%(ext)s".to_string());
     args.push("-o".to_string());
     args.push(out_dir.join(template).to_string_lossy().to_string());
 
-    let (mut rx, _child) = app.shell().command(ytdlp_bin).args(args).spawn().map_err(|e| e.to_string())?;
+    let (mut rx, _child) = app
+        .shell()
+        .command(ytdlp_bin)
+        .args(args)
+        .spawn()
+        .map_err(|e| e.to_string())?;
 
     while let Some(event) = rx.recv().await {
         if let CommandEvent::Stdout(line) = event {
             let text = String::from_utf8_lossy(&line).to_string();
+            info!("yt-dlp: {}", text.trim());
             app.emit("download_progress", text).unwrap_or(());
+        } else if let CommandEvent::Stderr(line) = event {
+            let text = String::from_utf8_lossy(&line).to_string();
+            warn!("yt-dlp stderr: {}", text.trim());
         }
     }
 
+    info!("Download sequence completed for URL: {}", options.url);
     Ok("Download Complete".to_string())
+}
+
+use serde::Serialize;
+use serde_json::Value;
+
+#[derive(Serialize)]
+pub struct ExtractedFormats {
+    pub video_resolutions: Vec<i64>,
+    pub audio_bitrates: Vec<f64>,
+}
+
+#[tauri::command]
+pub async fn fetch_formats(
+    app: tauri::AppHandle,
+    url: String,
+    custom_ytdlp: Option<String>,
+) -> Result<String, String> {
+    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let bin_dir = current_exe.parent().unwrap().join("bin");
+
+    let ytdlp_bin = custom_ytdlp
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| bin_dir.join("yt-dlp.exe").to_string_lossy().to_string());
+
+    let args = vec![
+        "--print".to_string(),
+        "%(formats.:.{vcodec,height,acodec,abr})j".to_string(),
+        "--no-playlist".to_string(),
+        url,
+    ];
+
+    let output = app
+        .shell()
+        .command(ytdlp_bin)
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if output.status.success() {
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let parsed: Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+
+        let mut heights: Vec<i64> = Vec::new();
+        let mut bitrates: Vec<f64> = Vec::new();
+
+        if let Some(formats) = parsed.as_array() {
+            for format in formats {
+                // Video Parsing
+                let vcodec = format
+                    .get("vcodec")
+                    .and_then(Value::as_str)
+                    .unwrap_or("none");
+                if vcodec != "none" {
+                    if let Some(height) = format.get("height").and_then(Value::as_i64) {
+                        if !heights.contains(&height) {
+                            heights.push(height);
+                        }
+                    }
+                }
+
+                // Audio Parsing
+                let acodec = format
+                    .get("acodec")
+                    .and_then(Value::as_str)
+                    .unwrap_or("none");
+                if acodec != "none" {
+                    if let Some(abr) = format.get("abr").and_then(Value::as_f64) {
+                        if !bitrates.contains(&abr) {
+                            bitrates.push(abr);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort descending
+        heights.sort_by(|a, b| b.cmp(a));
+        bitrates.sort_by(|a, b| b.partial_cmp(a).unwrap());
+
+        let payload = ExtractedFormats {
+            video_resolutions: heights,
+            audio_bitrates: bitrates,
+        };
+
+        Ok(serde_json::to_string(&payload).map_err(|e| e.to_string())?)
+    } else {
+        let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("Extraction failed: {}", err_str))
+    }
 }

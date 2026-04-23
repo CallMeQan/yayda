@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { info, error, warn } from "@tauri-apps/plugin-log";
 import "./App.css";
 
 type DownloadOptions = {
@@ -44,6 +45,11 @@ function App() {
     const [progressMsg, setProgressMsg] = useState("");
     const [toast, setToast] = useState<{ msg: string, type: "error" | "success" } | null>(null);
 
+    // Fetch the video
+    const [availableResolutions, setAvailableResolutions] = useState<string[]>([]);
+    const [fetchingInfo, setFetchingInfo] = useState(false);
+    const [availableAudioBitrates, setAvailableAudioBitrates] = useState<string[]>([]);
+
     useEffect(() => {
         const unlistenPromise = listen<string>("download_progress", (event) => {
             setProgressMsg(event.payload);
@@ -75,10 +81,11 @@ function App() {
 
     const handleDownload = async () => {
         if (!isValidUrl(url)) {
+            warn(`User invalid URL: ${url}`);
             setToast({ msg: "Please enter a valid HTTP URL", type: "error" });
             return;
         }
-
+        info(`Download URL: ${url} | Format: ${videoFormat} | Quality: ${videoQuality}`);
         setDownloading(true);
         setProgressMsg("Starting download...");
         setToast(null);
@@ -101,14 +108,57 @@ function App() {
 
         try {
             const response = await invoke<string>("download_video", { options });
+            info(`Download successful: ${response}`);
             setToast({ msg: response, type: "success" });
             setProgressMsg("");
             setUrl("");
         } catch (e: any) {
+            error(`Download failed with exception: ${e}`);
             setToast({ msg: `Error: ${e}`, type: "error" });
             setProgressMsg("");
         } finally {
             setDownloading(false);
+        }
+    };
+
+    const handleFetchInfo = async () => {
+        if (!isValidUrl(url)) {
+            warn(`User invalid URL: ${url}`);
+            setToast({ msg: "Please enter a valid HTTP URL", type: "error" });
+            return;
+        }
+        info(`Fetching format metadata for URL: ${url}`);
+        setFetchingInfo(true);
+        setProgressMsg("Extracting format data...");
+        setToast(null);
+    
+        try {
+            const jsonStr = await invoke<string>("fetch_formats", { 
+                url, 
+                customYtdlp: customYtdlp.trim() || null 
+            });
+            
+            info(`Format metadata found for URL: ${url}`);
+            const data = JSON.parse(jsonStr);
+            
+            const videoRes = data.video_resolutions.map(String);
+            // Round bitrates to integers for cleaner UI display (e.g., 129.5 -> 130)
+            const audioBr = data.audio_bitrates.map((b: number) => String(Math.round(b)));
+            
+            setAvailableResolutions(videoRes);
+            setAvailableAudioBitrates(audioBr);
+            
+            // Automatically select the highest available qualities
+            if (videoRes.length > 0) setVideoQuality(videoRes[0]);
+            if (audioBr.length > 0) setAudioQuality(audioBr[0]);
+            
+            setToast({ msg: "Format parameters synchronized.", type: "success" });
+        } catch (e: any) {
+            error(`Failed to extract format metadata: ${e}`);
+            setToast({ msg: `Extraction Error: ${e}`, type: "error" });
+        } finally {
+            setFetchingInfo(false);
+            setProgressMsg("");
         }
     };
 
@@ -144,14 +194,23 @@ function App() {
                 )}
 
                 <div className="flex flex-col gap-6">
-                    <input
-                        type="url"
-                        className="w-full bg-black border border-gray-600 p-4 font-mono focus:border-white focus:outline-none transition-colors"
-                        placeholder="ENTER VIDEO URL"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        disabled={downloading}
-                    />
+                    <div className="flex gap-2">
+                        <input
+                            type="url"
+                            className="w-full bg-black border border-gray-600 p-4 font-mono focus:border-white focus:outline-none transition-colors"
+                            placeholder="ENTER VIDEO URL"
+                            value={url}
+                            onChange={(e) => setUrl(e.target.value)}
+                            disabled={downloading || fetchingInfo}
+                        />
+                        <button 
+                            onClick={handleFetchInfo}
+                            disabled={!url || downloading || fetchingInfo}
+                            className="bg-white text-black px-6 font-display font-bold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                        >
+                            {fetchingInfo ? "..." : "FETCH"}
+                        </button>
+                    </div>
 
                     <div className="flex justify-between items-center text-sm font-mono tracking-widest text-gray-500">
                         <button
@@ -198,14 +257,22 @@ function App() {
                                         <label className="font-mono text-xs text-gray-500">VIDEO QUALITY</label>
                                         <select value={videoQuality} onChange={e => setVideoQuality(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
                                             <option value="best">Best Available</option>
-                                            <option value="2160">4K (2160p)</option>
-                                            <option value="1440">1440p</option>
-                                            <option value="1080">1080p</option>
-                                            <option value="720">720p</option>
-                                            <option value="480">480p</option>
-                                            <option value="360">360p</option>
-                                            <option value="240">240p</option>
-                                            <option value="144">144p</option>
+                                            {availableResolutions.length > 0 ? (
+                                                availableResolutions.map(res => (
+                                                    <option key={res} value={res}>{res}p</option>
+                                                ))
+                                            ) : (
+                                                <>
+                                                    <option value="2160">4K (2160p)</option>
+                                                    <option value="1440">1440p</option>
+                                                    <option value="1080">1080p</option>
+                                                    <option value="720">720p</option>
+                                                    <option value="480">480p</option>
+                                                    <option value="360">360p</option>
+                                                    <option value="240">240p</option>
+                                                    <option value="144">144p</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
@@ -226,11 +293,19 @@ function App() {
                                         <label className="font-mono text-xs text-gray-500">AUDIO QUALITY</label>
                                         <select value={audioQuality} onChange={e => setAudioQuality(e.target.value)} className="bg-black border border-gray-600 p-2 font-mono text-gray-300 outline-none">
                                             <option value="best">Best Available</option>
-                                            <option value="320">320 kbps</option>
-                                            <option value="256">256 kbps</option>
-                                            <option value="192">192 kbps</option>
-                                            <option value="128">128 kbps</option>
-                                            <option value="64">64 kbps</option>
+                                            {availableAudioBitrates.length > 0 ? (
+                                                availableAudioBitrates.map(bitrate => (
+                                                    <option key={bitrate} value={bitrate}>{bitrate} kbps</option>
+                                                ))
+                                            ) : (
+                                                <>
+                                                    <option value="320">320 kbps</option>
+                                                    <option value="256">256 kbps</option>
+                                                    <option value="192">192 kbps</option>
+                                                    <option value="128">128 kbps</option>
+                                                    <option value="64">64 kbps</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
