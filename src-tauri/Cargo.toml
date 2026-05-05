@@ -31,3 +31,5 @@ chrono = "0.4.44"
 tauri-plugin-log = "2"
 log = "0.4.29"
 
+[profile.release]
+panic = 'abort' # Removes stack unwinding code
