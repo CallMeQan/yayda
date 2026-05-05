@@ -13,8 +13,8 @@
         "windows": [
             {
                 "title": "yayda-tauri",
-                "width": 480,
-                "height": 360
+                "width": 1280,
+                "height": 720
             }
         ],
         "security": {
